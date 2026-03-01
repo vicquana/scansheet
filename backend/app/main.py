@@ -1,4 +1,5 @@
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import List
@@ -25,6 +26,42 @@ app.add_middleware(
 
 DOWNLOAD_DIR = Path(os.getenv("DOWNLOAD_DIR", "backend/app/downloads"))
 store = DownloadStore(DOWNLOAD_DIR)
+
+
+def _readiness_status() -> dict:
+    audiveris_bin = os.getenv("AUDIVERIS_BIN", "audiveris")
+    audiveris_available = shutil.which(audiveris_bin) is not None
+
+    download_dir_writable = True
+    try:
+        store.base_dir.mkdir(parents=True, exist_ok=True)
+        probe = store.base_dir / ".healthcheck.tmp"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+    except OSError:
+        download_dir_writable = False
+
+    ready = audiveris_available and download_dir_writable
+    return {
+        "ready": ready,
+        "checks": {
+            "audiveris_available": audiveris_available,
+            "download_dir_writable": download_dir_writable,
+        },
+    }
+
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/api/ready")
+def readiness():
+    status = _readiness_status()
+    if not status["ready"]:
+        raise HTTPException(status_code=503, detail=status)
+    return status
 
 
 @app.post("/api/convert")

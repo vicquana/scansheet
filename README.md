@@ -102,8 +102,62 @@ Batch response:
 }
 ```
 
+### `GET /api/health`
+Liveness endpoint for container/process checks. Returns:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### `GET /api/ready`
+Readiness endpoint for platform health checks. Verifies Audiveris binary visibility and writable download storage.
+- `200`: dependencies are ready
+- `503`: one or more readiness checks failed
+
+### `GET /api/health`
+Liveness endpoint for process/container checks.
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### `GET /api/ready`
+Readiness endpoint for platform health checks.
+- `200`: Audiveris binary is available and download directory is writable
+- `503`: one or more readiness checks failed
+
 ### `GET /api/download/{file_id}`
 Downloads the transposed `.musicxml` file.
+
+## Tests
+
+Run backend tests:
+
+```bash
+PYTHONPATH=backend pytest backend/tests
+```
+
+Test coverage includes:
+- `/api/health` and `/api/ready`
+- `/api/convert` response shape using mocked OMR/transposition
+- missing-file behavior for `/api/download/{file_id}`
+
+## Tests
+
+Run backend tests with:
+
+```bash
+PYTHONPATH=backend pytest backend/tests
+```
+
+These tests cover:
+- `/api/health` and `/api/ready`
+- `/api/convert` request/response shape (with mocked OMR/transposition)
+- missing download file behavior
 
 ## Docker
 
