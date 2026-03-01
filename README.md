@@ -19,6 +19,7 @@ scoretransposer/
 │   │       ├── storage.py
 │   │       └── transpose.py
 │   └── run.py
+├── backend/tests/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/ResultCard.tsx
@@ -33,20 +34,21 @@ scoretransposer/
 
 ## Local Development
 
-### 1) Backend
+### 1) Backend (with uv)
 
 Prerequisites:
 - Python 3.11+
+- [uv](https://docs.astral.sh/uv/)
 - Java 17+
 - Audiveris CLI available as `audiveris` (or set `AUDIVERIS_BIN` in `.env`)
 
 ```bash
-python -m venv .venv
+uv venv
 source .venv/bin/activate
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 cp .env.example .env
 export $(grep -v '^#' .env | xargs)
-python backend/run.py
+uv run python backend/run.py
 ```
 
 Backend runs on `http://localhost:8000`.
@@ -103,20 +105,6 @@ Batch response:
 ```
 
 ### `GET /api/health`
-Liveness endpoint for container/process checks. Returns:
-
-```json
-{
-  "status": "ok"
-}
-```
-
-### `GET /api/ready`
-Readiness endpoint for platform health checks. Verifies Audiveris binary visibility and writable download storage.
-- `200`: dependencies are ready
-- `503`: one or more readiness checks failed
-
-### `GET /api/health`
 Liveness endpoint for process/container checks.
 
 ```json
@@ -138,26 +126,14 @@ Downloads the transposed `.musicxml` file.
 Run backend tests:
 
 ```bash
-PYTHONPATH=backend pytest backend/tests
+source .venv/bin/activate
+PYTHONPATH=backend uv run pytest backend/tests -q
 ```
 
 Test coverage includes:
 - `/api/health` and `/api/ready`
 - `/api/convert` response shape using mocked OMR/transposition
 - missing-file behavior for `/api/download/{file_id}`
-
-## Tests
-
-Run backend tests with:
-
-```bash
-PYTHONPATH=backend pytest backend/tests
-```
-
-These tests cover:
-- `/api/health` and `/api/ready`
-- `/api/convert` request/response shape (with mocked OMR/transposition)
-- missing download file behavior
 
 ## Docker
 
