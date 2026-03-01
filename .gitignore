@@ -1,8 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
 node_modules/
-build/
-dist/
-coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
+frontend/node_modules/
+frontend/dist/
+
+# Runtime files
+backend/app/downloads/*.musicxml
+.env
