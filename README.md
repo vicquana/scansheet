@@ -53,6 +53,13 @@ uv run python backend/run.py
 
 Backend runs on `http://localhost:8000`.
 
+Makefile shortcuts:
+
+```bash
+make setup-backend
+make dev-backend
+```
+
 ### 2) Frontend
 
 ```bash
@@ -62,6 +69,13 @@ npm run dev
 ```
 
 Frontend runs on `http://localhost:5173` and proxies `/api` to `http://localhost:8000`.
+
+Makefile shortcuts:
+
+```bash
+make install-frontend
+make dev-frontend
+```
 
 ## API
 
@@ -128,6 +142,12 @@ Run backend tests:
 ```bash
 source .venv/bin/activate
 PYTHONPATH=backend uv run pytest backend/tests -q
+```
+
+Makefile shortcut:
+
+```bash
+make test
 ```
 
 Test coverage includes:
