@@ -1,4 +1,5 @@
 import os
+import mimetypes
 import shutil
 import tempfile
 from pathlib import Path
@@ -12,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from app.services.omr import AudiverisError, run_audiveris
 from app.services.storage import DownloadStore
 from app.services.transpose import TransposeError, transpose_to_c_major
+from app.services.image_cleanup import ImageCleanupError, generate_clean_sheet_outputs
 
 app = FastAPI(title="ScoreTransposer API", version="0.1.0")
 
@@ -92,17 +94,40 @@ async def convert_sheet_music(request: Request, files: List[UploadFile] = File(.
 
             try:
                 musicxml_path = run_audiveris(input_image, output_dir)
-                file_id, download_target = store.create_download_path()
-                original_key = transpose_to_c_major(musicxml_path, download_target)
-            except (AudiverisError, TransposeError) as exc:
+                original_musicxml_id, original_musicxml_target = store.create_download_path(".musicxml")
+                transposed_musicxml_id, transposed_musicxml_target = store.create_download_path(".musicxml")
+                cleaned_jpeg_id, cleaned_jpeg_target = store.create_download_path(".jpg")
+                cleaned_pdf_id, cleaned_pdf_target = store.create_download_path(".pdf")
+
+                shutil.copyfile(musicxml_path, original_musicxml_target)
+                original_key = transpose_to_c_major(musicxml_path, transposed_musicxml_target)
+                generate_clean_sheet_outputs(input_image, cleaned_jpeg_target, cleaned_pdf_target)
+            except (AudiverisError, TransposeError, ImageCleanupError, OSError) as exc:
                 raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-            download_url = str(request.url_for("download_transposed", file_id=file_id))
+            transposed_musicxml_url = str(
+                request.url_for("download_artifact", artifact_name=transposed_musicxml_id)
+            )
+            original_musicxml_url = str(
+                request.url_for("download_artifact", artifact_name=original_musicxml_id)
+            )
+            cleaned_jpeg_url = str(
+                request.url_for("download_artifact", artifact_name=cleaned_jpeg_id)
+            )
+            cleaned_pdf_url = str(
+                request.url_for("download_artifact", artifact_name=cleaned_pdf_id)
+            )
             results.append(
                 {
                     "filename": upload.filename,
                     "original_key": original_key,
-                    "download_url": download_url,
+                    "download_url": transposed_musicxml_url,
+                    "downloads": {
+                        "transposed_musicxml_url": transposed_musicxml_url,
+                        "original_musicxml_url": original_musicxml_url,
+                        "original_clean_jpeg_url": cleaned_jpeg_url,
+                        "original_pdf_url": cleaned_pdf_url,
+                    },
                 }
             )
 
@@ -117,16 +142,21 @@ async def convert_sheet_music(request: Request, files: List[UploadFile] = File(.
     return {"results": results}
 
 
-@app.get("/api/download/{file_id}", name="download_transposed")
-def download_transposed(file_id: str):
-    file_path = store.resolve(file_id)
+@app.get("/api/download/{artifact_name}", name="download_artifact")
+def download_artifact(artifact_name: str):
+    try:
+        file_path = store.resolve(artifact_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found or expired")
 
+    media_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
     return FileResponse(
         file_path,
-        media_type="application/vnd.recordare.musicxml+xml",
-        filename=f"transposed-{file_id}.musicxml",
+        media_type=media_type,
+        filename=file_path.name,
     )
 
 

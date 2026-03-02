@@ -15,17 +15,23 @@ class DownloadStore:
 
     def cleanup(self) -> None:
         now = time.time()
-        for file_path in self.base_dir.glob("*.musicxml"):
+        for file_path in self.base_dir.glob("*"):
+            if not file_path.is_file():
+                continue
             try:
                 if now - file_path.stat().st_mtime > DOWNLOAD_TTL_SECONDS:
                     file_path.unlink(missing_ok=True)
             except OSError:
                 continue
 
-    def create_download_path(self) -> tuple[str, Path]:
-        file_id = uuid.uuid4().hex
-        target = self.base_dir / f"{file_id}.musicxml"
-        return file_id, target
+    def create_download_path(self, extension: str) -> tuple[str, Path]:
+        normalized_ext = extension if extension.startswith(".") else f".{extension}"
+        artifact_name = f"{uuid.uuid4().hex}{normalized_ext}"
+        target = self.base_dir / artifact_name
+        return artifact_name, target
 
-    def resolve(self, file_id: str) -> Path:
-        return self.base_dir / f"{file_id}.musicxml"
+    def resolve(self, artifact_name: str) -> Path:
+        safe_name = Path(artifact_name).name
+        if safe_name != artifact_name:
+            raise ValueError("Invalid download id")
+        return self.base_dir / safe_name

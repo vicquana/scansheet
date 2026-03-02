@@ -12,6 +12,12 @@ type ConvertResponse = {
     filename: string;
     original_key: string;
     download_url: string;
+    downloads?: {
+      transposed_musicxml_url: string;
+      original_musicxml_url: string;
+      original_clean_jpeg_url: string;
+      original_pdf_url: string;
+    };
   }>;
 };
 
@@ -22,6 +28,12 @@ export default function App() {
   const [musicXml, setMusicXml] = useState<string | null>(null);
   const [originalKey, setOriginalKey] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloads, setDownloads] = useState<{
+    transposed_musicxml_url: string;
+    original_musicxml_url: string;
+    original_clean_jpeg_url: string;
+    original_pdf_url: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFileSelect = (file: File) => {
@@ -30,6 +42,7 @@ export default function App() {
     setMusicXml(null);
     setOriginalKey(null);
     setDownloadUrl(null);
+    setDownloads(null);
     setError(null);
   };
 
@@ -66,6 +79,12 @@ export default function App() {
               filename: selectedFile?.name ?? "score.png",
               original_key: data.original_key,
               download_url: data.download_url,
+              downloads: {
+                transposed_musicxml_url: data.download_url,
+                original_musicxml_url: data.download_url,
+                original_clean_jpeg_url: "",
+                original_pdf_url: "",
+              },
             }
           : null;
 
@@ -73,7 +92,10 @@ export default function App() {
         throw new Error("No conversion output returned from server");
       }
 
-      const xmlResponse = await fetch(firstResult.download_url);
+      const transposedXmlUrl =
+        firstResult.downloads?.transposed_musicxml_url ?? firstResult.download_url;
+
+      const xmlResponse = await fetch(transposedXmlUrl);
       if (!xmlResponse.ok) {
         throw new Error("Converted file generated but failed to download MusicXML");
       }
@@ -81,7 +103,8 @@ export default function App() {
       const xmlText = await xmlResponse.text();
       setMusicXml(xmlText);
       setOriginalKey(firstResult.original_key);
-      setDownloadUrl(firstResult.download_url);
+      setDownloadUrl(transposedXmlUrl);
+      setDownloads(firstResult.downloads ?? null);
     } catch (err) {
       console.error("Upload error:", err);
       setError(err instanceof Error ? err.message : "An unknown error occurred");
@@ -156,6 +179,34 @@ export default function App() {
                     Download transposed MusicXML from server
                   </a>
                 )}
+                {downloads && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <a
+                      className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-700"
+                      href={downloads.original_pdf_url}
+                    >
+                      Original PDF
+                    </a>
+                    <a
+                      className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-700"
+                      href={downloads.original_clean_jpeg_url}
+                    >
+                      Cleaned Original JPEG
+                    </a>
+                    <a
+                      className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-700"
+                      href={downloads.original_musicxml_url}
+                    >
+                      Original MusicXML
+                    </a>
+                    <a
+                      className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-700"
+                      href={downloads.transposed_musicxml_url}
+                    >
+                      Transposed MusicXML
+                    </a>
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => {
@@ -164,6 +215,7 @@ export default function App() {
                   setProcessedBlob(null);
                   setOriginalKey(null);
                   setDownloadUrl(null);
+                  setDownloads(null);
                 }}
                 className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
               >

@@ -89,12 +89,18 @@ Single-file response (MVP compatibility):
 ```json
 {
   "original_key": "G major",
-  "download_url": "http://localhost:8000/api/download/<id>",
+  "download_url": "http://localhost:8000/api/download/<transposed_id>.musicxml",
   "results": [
     {
       "filename": "score.png",
       "original_key": "G major",
-      "download_url": "http://localhost:8000/api/download/<id>"
+      "download_url": "http://localhost:8000/api/download/<transposed_id>.musicxml",
+      "downloads": {
+        "transposed_musicxml_url": "http://localhost:8000/api/download/<transposed_id>.musicxml",
+        "original_musicxml_url": "http://localhost:8000/api/download/<original_id>.musicxml",
+        "original_clean_jpeg_url": "http://localhost:8000/api/download/<jpeg_id>.jpg",
+        "original_pdf_url": "http://localhost:8000/api/download/<pdf_id>.pdf"
+      }
     }
   ]
 }
@@ -133,8 +139,12 @@ Readiness endpoint for platform health checks.
 - `200`: Audiveris binary is available and download directory is writable
 - `503`: one or more readiness checks failed
 
-### `GET /api/download/{file_id}`
-Downloads the transposed `.musicxml` file.
+### `GET /api/download/{artifact_name}`
+Downloads any generated artifact:
+- transposed MusicXML
+- original-key MusicXML
+- cleaned original JPEG
+- original-key PDF
 
 ## Tests
 

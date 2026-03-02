@@ -13,8 +13,13 @@ def test_convert_single_file_returns_flat_and_results_shape(client, monkeypatch)
         output_path.write_text("<score-partwise version='4.0' />", encoding="utf-8")
         return "G major"
 
+    def fake_cleanup(_source: Path, jpeg_output: Path, pdf_output: Path) -> None:
+        jpeg_output.write_bytes(b"jpeg")
+        pdf_output.write_bytes(b"%PDF-1.4")
+
     monkeypatch.setattr(main_module, "run_audiveris", fake_run_audiveris)
     monkeypatch.setattr(main_module, "transpose_to_c_major", fake_transpose)
+    monkeypatch.setattr(main_module, "generate_clean_sheet_outputs", fake_cleanup)
 
     files = {"files": ("score.png", b"image-bytes", "image/png")}
     response = client.post("/api/convert", files=files)
@@ -26,6 +31,9 @@ def test_convert_single_file_returns_flat_and_results_shape(client, monkeypatch)
     assert payload["results"][0]["filename"] == "score.png"
     assert payload["download_url"] == payload["results"][0]["download_url"]
     assert "/api/download/" in payload["download_url"]
+    assert payload["results"][0]["downloads"]["original_pdf_url"].endswith(".pdf")
+    assert payload["results"][0]["downloads"]["original_clean_jpeg_url"].endswith(".jpg")
+    assert payload["results"][0]["downloads"]["original_musicxml_url"].endswith(".musicxml")
 
 
 def test_convert_rejects_non_image_file(client):
