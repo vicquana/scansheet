@@ -12,7 +12,11 @@ from fastapi.staticfiles import StaticFiles
 
 from app.services.omr import AudiverisError, run_audiveris
 from app.services.storage import DownloadStore
-from app.services.transpose import TransposeError, transpose_to_c_major
+from app.services.transpose import (
+    TransposeError,
+    export_original_musicxml,
+    transpose_to_c_major,
+)
 from app.services.image_cleanup import ImageCleanupError, generate_clean_sheet_outputs
 
 app = FastAPI(title="ScoreTransposer API", version="0.1.0")
@@ -99,7 +103,7 @@ async def convert_sheet_music(request: Request, files: List[UploadFile] = File(.
                 cleaned_jpeg_id, cleaned_jpeg_target = store.create_download_path(".jpg")
                 cleaned_pdf_id, cleaned_pdf_target = store.create_download_path(".pdf")
 
-                shutil.copyfile(musicxml_path, original_musicxml_target)
+                export_original_musicxml(musicxml_path, original_musicxml_target)
                 original_key = transpose_to_c_major(musicxml_path, transposed_musicxml_target)
                 generate_clean_sheet_outputs(input_image, cleaned_jpeg_target, cleaned_pdf_target)
             except (AudiverisError, TransposeError, ImageCleanupError, OSError) as exc:

@@ -1,5 +1,4 @@
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -46,16 +45,4 @@ def run_audiveris(image_path: Path, output_dir: Path) -> Path:
             "Audiveris finished but no MusicXML file was found in output directory."
         )
 
-    generated_path = musicxml_candidates[0]
-
-    # If Audiveris returned compressed .mxl, duplicate it to .musicxml only when possible.
-    if generated_path.suffix.lower() == ".mxl":
-        copy_target = generated_path.with_suffix(".musicxml")
-        try:
-            shutil.copyfile(generated_path, copy_target)
-            generated_path = copy_target
-        except OSError:
-            # Keep original .mxl when conversion copy fails.
-            pass
-
-    return generated_path
+    return musicxml_candidates[0]

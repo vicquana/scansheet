@@ -32,3 +32,12 @@ def transpose_to_c_major(source_path: Path, output_path: Path) -> str:
         raise TransposeError(f"Failed to write transposed MusicXML: {exc}") from exc
 
     return f"{detected_key.tonic.name} {detected_key.mode}"
+
+
+def export_original_musicxml(source_path: Path, output_path: Path) -> None:
+    """Normalize OMR output (including .mxl) to an uncompressed MusicXML file."""
+    try:
+        score: stream.Score = converter.parse(str(source_path))
+        score.write("musicxml", fp=str(output_path))
+    except Exception as exc:
+        raise TransposeError(f"Failed to export original MusicXML: {exc}") from exc
