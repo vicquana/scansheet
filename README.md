@@ -39,6 +39,7 @@ scoretransposer/
 Prerequisites:
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/)
+- [pnpm](https://pnpm.io/installation)
 - Java 17+
 - Audiveris CLI available as `audiveris` (or set `AUDIVERIS_BIN` in `.env`)
 
@@ -64,8 +65,8 @@ make dev-backend
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Frontend runs on `http://localhost:5173` and proxies `/api` to `http://localhost:8000`.

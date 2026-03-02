@@ -13,7 +13,7 @@ test:
 	source .venv/bin/activate && PYTHONPATH=backend uv run pytest backend/tests -q
 
 install-frontend:
-	cd frontend && npm install
+	cd frontend && pnpm install
 
 dev-frontend:
-	cd frontend && npm run dev
+	cd frontend && pnpm dev

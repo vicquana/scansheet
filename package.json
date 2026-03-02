@@ -2,9 +2,10 @@
   "name": "scoretransposer",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@10.5.2",
   "scripts": {
-    "dev:frontend": "npm --prefix frontend run dev",
-    "build:frontend": "npm --prefix frontend run build",
-    "preview:frontend": "npm --prefix frontend run preview"
+    "dev:frontend": "pnpm --dir frontend dev",
+    "build:frontend": "pnpm --dir frontend build",
+    "preview:frontend": "pnpm --dir frontend preview"
   }
 }
