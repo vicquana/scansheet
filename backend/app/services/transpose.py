@@ -1,4 +1,6 @@
 from pathlib import Path
+import xml.etree.ElementTree as ET
+import zipfile
 
 from music21 import converter, interval, key, stream
 
@@ -39,5 +41,27 @@ def export_original_musicxml(source_path: Path, output_path: Path) -> None:
     try:
         score: stream.Score = converter.parse(str(source_path))
         score.write("musicxml", fp=str(output_path))
+        return
+    except Exception:
+        # Fall through to archive extraction fallback for problematic .mxl files.
+        pass
+
+    if source_path.suffix.lower() != ".mxl":
+        raise TransposeError("Failed to export original MusicXML: unsupported non-MXL fallback")
+
+    try:
+        with zipfile.ZipFile(source_path, "r") as zf:
+            container_xml = zf.read("META-INF/container.xml")
+            root = ET.fromstring(container_xml)
+            rootfile = root.find(".//{*}rootfile")
+            if rootfile is None:
+                raise TransposeError("Failed to export original MusicXML: missing rootfile in MXL container")
+
+            full_path = rootfile.attrib.get("full-path")
+            if not full_path:
+                raise TransposeError("Failed to export original MusicXML: invalid rootfile path in MXL")
+
+            xml_bytes = zf.read(full_path)
+            output_path.write_bytes(xml_bytes)
     except Exception as exc:
         raise TransposeError(f"Failed to export original MusicXML: {exc}") from exc
