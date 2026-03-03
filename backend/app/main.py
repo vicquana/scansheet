@@ -5,19 +5,23 @@ import tempfile
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.services.omr import AudiverisError, run_audiveris
+from app.services.omr import AudiverisError, build_ordered_pdf, run_audiveris
 from app.services.storage import DownloadStore
 from app.services.transpose import (
     TransposeError,
     export_original_musicxml,
     transpose_to_c_major,
 )
-from app.services.image_cleanup import ImageCleanupError, generate_clean_sheet_outputs
+from app.services.image_cleanup import (
+    ImageCleanupError,
+    generate_clean_sheet_outputs,
+    generate_clean_sheet_outputs_from_images,
+)
 
 app = FastAPI(title="ScoreTransposer API", version="0.1.0")
 
@@ -70,80 +74,97 @@ def readiness():
     return status
 
 
+def _ordered_uploads(files: List[UploadFile], file_last_modified: List[int]) -> List[UploadFile]:
+    uploads_with_order = []
+    for index, upload in enumerate(files):
+        timestamp = file_last_modified[index] if index < len(file_last_modified) else 0
+        uploads_with_order.append((timestamp, index, upload))
+
+    uploads_with_order.sort(key=lambda item: (item[0], item[1]))
+    return [upload for _, _, upload in uploads_with_order]
+
+
 @app.post("/api/convert")
-async def convert_sheet_music(request: Request, files: List[UploadFile] = File(...)):
+async def convert_sheet_music(
+    request: Request,
+    files: List[UploadFile] = File(...),
+    file_last_modified: List[int] = Form(default=[]),
+):
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded")
 
     store.cleanup()
-    results = []
 
-    for upload in files:
-        if upload.content_type not in {"image/jpeg", "image/png"}:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported file type for {upload.filename}. Use JPG or PNG.",
-            )
+    ordered_uploads = _ordered_uploads(files, file_last_modified)
+    filenames_in_order = []
 
-        suffix = Path(upload.filename or "input.png").suffix or ".png"
+    with tempfile.TemporaryDirectory(prefix="scoretransposer-") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        output_dir = tmp_path / "audiveris-output"
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-        with tempfile.TemporaryDirectory(prefix="scoretransposer-") as tmp_dir:
-            tmp_path = Path(tmp_dir)
-            input_image = tmp_path / f"input{suffix}"
-            output_dir = tmp_path / "audiveris-output"
-            output_dir.mkdir(parents=True, exist_ok=True)
+        ordered_images = []
+        for page_index, upload in enumerate(ordered_uploads, start=1):
+            if upload.content_type not in {"image/jpeg", "image/png"}:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported file type for {upload.filename}. Use JPG or PNG.",
+                )
 
-            data = await upload.read()
-            input_image.write_bytes(data)
+            suffix = Path(upload.filename or "input.png").suffix or ".png"
+            input_image = tmp_path / f"page-{page_index:04d}{suffix}"
+            input_image.write_bytes(await upload.read())
+            ordered_images.append(input_image)
+            filenames_in_order.append(upload.filename)
 
-            try:
-                musicxml_path = run_audiveris(input_image, output_dir)
-                original_musicxml_id, original_musicxml_target = store.create_download_path(".musicxml")
-                transposed_musicxml_id, transposed_musicxml_target = store.create_download_path(".musicxml")
-                cleaned_jpeg_id, cleaned_jpeg_target = store.create_download_path(".jpg")
-                cleaned_pdf_id, cleaned_pdf_target = store.create_download_path(".pdf")
+        omr_input = ordered_images[0]
+        if len(ordered_images) > 1:
+            omr_input = tmp_path / "ordered-pages.pdf"
+            build_ordered_pdf(ordered_images, omr_input)
 
-                export_original_musicxml(musicxml_path, original_musicxml_target)
-                original_key = transpose_to_c_major(musicxml_path, transposed_musicxml_target)
-                generate_clean_sheet_outputs(input_image, cleaned_jpeg_target, cleaned_pdf_target)
-            except (AudiverisError, TransposeError, ImageCleanupError, OSError) as exc:
-                raise HTTPException(status_code=500, detail=str(exc)) from exc
+        try:
+            musicxml_path = run_audiveris(omr_input, output_dir)
+            original_musicxml_id, original_musicxml_target = store.create_download_path(".musicxml")
+            transposed_musicxml_id, transposed_musicxml_target = store.create_download_path(".musicxml")
+            cleaned_jpeg_id, cleaned_jpeg_target = store.create_download_path(".jpg")
+            cleaned_pdf_id, cleaned_pdf_target = store.create_download_path(".pdf")
 
-            transposed_musicxml_url = str(
-                request.url_for("download_artifact", artifact_name=transposed_musicxml_id)
-            )
-            original_musicxml_url = str(
-                request.url_for("download_artifact", artifact_name=original_musicxml_id)
-            )
-            cleaned_jpeg_url = str(
-                request.url_for("download_artifact", artifact_name=cleaned_jpeg_id)
-            )
-            cleaned_pdf_url = str(
-                request.url_for("download_artifact", artifact_name=cleaned_pdf_id)
-            )
-            results.append(
-                {
-                    "filename": upload.filename,
-                    "original_key": original_key,
-                    "download_url": transposed_musicxml_url,
-                    "downloads": {
-                        "transposed_musicxml_url": transposed_musicxml_url,
-                        "original_musicxml_url": original_musicxml_url,
-                        "original_clean_jpeg_url": cleaned_jpeg_url,
-                        "original_pdf_url": cleaned_pdf_url,
-                    },
-                }
-            )
+            export_original_musicxml(musicxml_path, original_musicxml_target)
+            original_key = transpose_to_c_major(musicxml_path, transposed_musicxml_target)
+            if len(ordered_images) == 1:
+                generate_clean_sheet_outputs(ordered_images[0], cleaned_jpeg_target, cleaned_pdf_target)
+            else:
+                generate_clean_sheet_outputs_from_images(
+                    ordered_images, cleaned_jpeg_target, cleaned_pdf_target
+                )
+        except (AudiverisError, TransposeError, ImageCleanupError, OSError) as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    # Keep a flat shape for single-file clients while supporting true batch responses.
-    if len(results) == 1:
-        return {
-            "original_key": results[0]["original_key"],
-            "download_url": results[0]["download_url"],
-            "results": results,
-        }
-
-    return {"results": results}
+    transposed_musicxml_url = str(
+        request.url_for("download_artifact", artifact_name=transposed_musicxml_id)
+    )
+    original_musicxml_url = str(
+        request.url_for("download_artifact", artifact_name=original_musicxml_id)
+    )
+    cleaned_jpeg_url = str(request.url_for("download_artifact", artifact_name=cleaned_jpeg_id))
+    cleaned_pdf_url = str(request.url_for("download_artifact", artifact_name=cleaned_pdf_id))
+    result = {
+        "filename": "combined-song",
+        "source_files": filenames_in_order,
+        "original_key": original_key,
+        "download_url": transposed_musicxml_url,
+        "downloads": {
+            "transposed_musicxml_url": transposed_musicxml_url,
+            "original_musicxml_url": original_musicxml_url,
+            "original_clean_jpeg_url": cleaned_jpeg_url,
+            "original_pdf_url": cleaned_pdf_url,
+        },
+    }
+    return {
+        "original_key": original_key,
+        "download_url": transposed_musicxml_url,
+        "results": [result],
+    }
 
 
 @app.get("/api/download/{artifact_name}", name="download_artifact")

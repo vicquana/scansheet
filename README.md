@@ -82,7 +82,9 @@ make dev-frontend
 
 ### `POST /api/convert`
 - Content-Type: `multipart/form-data`
-- Field name: `files` (one or multiple image files)
+- Field name: `files` (one or multiple image files for a single song)
+- Optional field: `file_last_modified` (repeat once per file, milliseconds timestamp from browser `File.lastModified`)
+- Files are processed in ascending timestamp order so first-scanned pages stay first.
 
 Single-file response (MVP compatibility):
 
@@ -106,24 +108,7 @@ Single-file response (MVP compatibility):
 }
 ```
 
-Batch response:
-
-```json
-{
-  "results": [
-    {
-      "filename": "score1.png",
-      "original_key": "D major",
-      "download_url": "http://localhost:8000/api/download/<id1>"
-    },
-    {
-      "filename": "score2.jpg",
-      "original_key": "A major",
-      "download_url": "http://localhost:8000/api/download/<id2>"
-    }
-  ]
-}
-```
+When multiple images are uploaded, they are merged and converted into one combined song output.
 
 ### `GET /api/health`
 Liveness endpoint for process/container checks.

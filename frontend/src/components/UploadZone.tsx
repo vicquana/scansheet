@@ -8,11 +8,11 @@ function cn(...inputs: ClassValue[]) {
 }
 
 interface UploadZoneProps {
-  onFileSelect: (file: File) => void;
+  onFilesSelect: (files: File[]) => void;
   disabled?: boolean;
 }
 
-export function UploadZone({ onFileSelect, disabled }: UploadZoneProps) {
+export function UploadZone({ onFilesSelect, disabled }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = useCallback(
@@ -38,12 +38,14 @@ export function UploadZone({ onFileSelect, disabled }: UploadZoneProps) {
         return;
       }
 
-      const file = event.dataTransfer.files[0];
-      if (file && (file.type === "image/jpeg" || file.type === "image/png")) {
-        onFileSelect(file);
+      const files = Array.from(event.dataTransfer.files).filter(
+        (file) => file.type === "image/jpeg" || file.type === "image/png",
+      );
+      if (files.length > 0) {
+        onFilesSelect(files);
       }
     },
-    [disabled, onFileSelect],
+    [disabled, onFilesSelect],
   );
 
   const handleFileInput = useCallback(
@@ -51,12 +53,15 @@ export function UploadZone({ onFileSelect, disabled }: UploadZoneProps) {
       if (disabled) {
         return;
       }
-      const file = event.target.files?.[0];
-      if (file) {
-        onFileSelect(file);
+      const files = Array.from(event.target.files ?? []);
+      const validFiles = files.filter(
+        (file) => file.type === "image/jpeg" || file.type === "image/png",
+      );
+      if (validFiles.length > 0) {
+        onFilesSelect(validFiles);
       }
     },
-    [disabled, onFileSelect],
+    [disabled, onFilesSelect],
   );
 
   return (
@@ -75,6 +80,7 @@ export function UploadZone({ onFileSelect, disabled }: UploadZoneProps) {
       <input
         type="file"
         accept="image/jpeg, image/png"
+        multiple
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
         onChange={handleFileInput}
         disabled={disabled}
@@ -91,8 +97,8 @@ export function UploadZone({ onFileSelect, disabled }: UploadZoneProps) {
           <UploadCloud className="h-8 w-8" />
         </div>
         <div>
-          <p className="mb-1 text-lg font-medium text-zinc-200">Drop your sheet music here</p>
-          <p className="text-sm text-zinc-500">Supports JPEG and PNG formats</p>
+          <p className="mb-1 text-lg font-medium text-zinc-200">Drop your sheet music photos here</p>
+          <p className="text-sm text-zinc-500">Select multiple JPEG/PNG pages from your phone</p>
         </div>
       </div>
     </div>
