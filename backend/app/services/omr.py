@@ -39,6 +39,7 @@ def run_audiveris(image_path: Path, output_dir: Path) -> Path:
     command = [
         audiveris_bin,
         "-batch",
+        "-transcribe",
         "-export",
         "-output",
         str(output_dir),
@@ -61,13 +62,24 @@ def run_audiveris(image_path: Path, output_dir: Path) -> Path:
         message = completed.stderr.strip() or completed.stdout.strip() or "Unknown Audiveris error"
         raise AudiverisError(f"Audiveris failed: {message}")
 
-    musicxml_candidates = sorted(
-        output_dir.rglob("*.musicxml")
-    ) + sorted(output_dir.rglob("*.xml")) + sorted(output_dir.rglob("*.mxl"))
+    def _candidates(root: Path) -> list[Path]:
+        return [
+            path
+            for path in root.rglob("*")
+            if path.is_file() and path.suffix.lower() in {".musicxml", ".xml", ".mxl"}
+        ]
+
+    musicxml_candidates = sorted(_candidates(output_dir))
+    if not musicxml_candidates:
+        # Audiveris sometimes writes output outside the requested directory on some setups.
+        musicxml_candidates = sorted(_candidates(image_path.parent))
 
     if not musicxml_candidates:
+        stderr = completed.stderr.strip()
+        stdout = completed.stdout.strip()
         raise AudiverisError(
-            "Audiveris finished but no MusicXML file was found in output directory."
+            "Audiveris finished but no MusicXML file was found. "
+            f"stdout={stdout[:300]} stderr={stderr[:300]}"
         )
 
     return musicxml_candidates[0]
