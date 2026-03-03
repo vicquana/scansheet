@@ -2,6 +2,7 @@ import os
 import mimetypes
 import shutil
 import tempfile
+import traceback
 from pathlib import Path
 from typing import List
 
@@ -139,6 +140,9 @@ async def convert_sheet_music(
                 )
         except (AudiverisError, TransposeError, ImageCleanupError, OSError) as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except Exception as exc:  # Ensure unexpected failures return a debuggable message.
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"Unexpected conversion error: {exc}") from exc
 
     transposed_musicxml_url = str(
         request.url_for("download_artifact", artifact_name=transposed_musicxml_id)
