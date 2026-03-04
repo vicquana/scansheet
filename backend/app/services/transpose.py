@@ -3,7 +3,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 import zipfile
 
-from music21 import converter, interval, key, layout, spanner, stream
+from music21 import converter, interval, key, layout, pitch, spanner, stream
 
 
 class TransposeError(RuntimeError):
@@ -40,6 +40,65 @@ def _write_musicxml_with_fallback(score: stream.Score, output_path: Path) -> Non
         ) from fallback_exc
 
 
+def _read_musicxml_bytes(source_path: Path) -> bytes:
+    if source_path.suffix.lower() != ".mxl":
+        return source_path.read_bytes()
+
+    with zipfile.ZipFile(source_path, "r") as zf:
+        container_xml = zf.read("META-INF/container.xml")
+        root = ET.fromstring(container_xml)
+        rootfile = root.find(".//{*}rootfile")
+        if rootfile is None:
+            raise TransposeError("Missing rootfile in MXL container")
+
+        full_path = rootfile.attrib.get("full-path")
+        if not full_path:
+            raise TransposeError("Invalid rootfile path in MXL")
+        return zf.read(full_path)
+
+
+def _xml_level_transpose_to_c_major(
+    source_path: Path, output_path: Path, transpose_interval: interval.Interval
+) -> None:
+    xml_bytes = _read_musicxml_bytes(source_path)
+    root = ET.fromstring(xml_bytes)
+
+    # Update key signatures to C major.
+    for fifths in root.findall(".//{*}key/{*}fifths"):
+        fifths.text = "0"
+
+    # Transpose every notated pitch.
+    for pitch_node in root.findall(".//{*}note/{*}pitch"):
+        step_node = pitch_node.find("{*}step")
+        octave_node = pitch_node.find("{*}octave")
+        alter_node = pitch_node.find("{*}alter")
+        if step_node is None or octave_node is None or not step_node.text or not octave_node.text:
+            continue
+
+        alter_value = 0
+        if alter_node is not None and alter_node.text:
+            try:
+                alter_value = int(float(alter_node.text))
+            except ValueError:
+                alter_value = 0
+
+        note_name = step_node.text + ("#" * max(alter_value, 0)) + ("-" * max(-alter_value, 0))
+        p = pitch.Pitch(f"{note_name}{octave_node.text}")
+        p = p.transpose(transpose_interval)
+
+        step_node.text = p.step
+        octave_node.text = str(p.octave if p.octave is not None else octave_node.text)
+        if p.accidental is None or p.accidental.alter == 0:
+            if alter_node is not None:
+                pitch_node.remove(alter_node)
+        else:
+            if alter_node is None:
+                alter_node = ET.SubElement(pitch_node, "alter")
+            alter_node.text = str(int(p.accidental.alter))
+
+    ET.ElementTree(root).write(output_path, encoding="utf-8", xml_declaration=True)
+
+
 def transpose_to_c_major(source_path: Path, output_path: Path) -> str:
     """Analyze key and transpose score so tonic maps to C."""
     try:
@@ -59,7 +118,11 @@ def transpose_to_c_major(source_path: Path, output_path: Path) -> str:
     for key_signature in transposed.recurse().getElementsByClass(key.KeySignature):
         key_signature.sharps = 0
 
-    _write_musicxml_with_fallback(transposed, output_path)
+    try:
+        _write_musicxml_with_fallback(transposed, output_path)
+    except TransposeError:
+        # Final fallback for writer edge-cases: apply transposition directly in MusicXML.
+        _xml_level_transpose_to_c_major(source_path, output_path, transpose_interval)
 
     return f"{detected_key.tonic.name} {detected_key.mode}"
 
@@ -78,18 +141,6 @@ def export_original_musicxml(source_path: Path, output_path: Path) -> None:
         raise TransposeError("Failed to export original MusicXML: unsupported non-MXL fallback")
 
     try:
-        with zipfile.ZipFile(source_path, "r") as zf:
-            container_xml = zf.read("META-INF/container.xml")
-            root = ET.fromstring(container_xml)
-            rootfile = root.find(".//{*}rootfile")
-            if rootfile is None:
-                raise TransposeError("Failed to export original MusicXML: missing rootfile in MXL container")
-
-            full_path = rootfile.attrib.get("full-path")
-            if not full_path:
-                raise TransposeError("Failed to export original MusicXML: invalid rootfile path in MXL")
-
-            xml_bytes = zf.read(full_path)
-            output_path.write_bytes(xml_bytes)
+        output_path.write_bytes(_read_musicxml_bytes(source_path))
     except Exception as exc:
         raise TransposeError(f"Failed to export original MusicXML: {exc}") from exc
