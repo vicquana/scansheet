@@ -176,3 +176,14 @@ Then open `http://localhost:8000`.
 5. Deploy.
 
 Render exposes one port; this app serves both frontend static files and FastAPI on port `8000` from one container.
+
+## CI/CD (GitHub Actions + Render Hook)
+
+- CI workflow: `.github/workflows/ci.yml`
+  - runs backend tests
+  - builds frontend
+- CD workflow: `.github/workflows/deploy-render.yml`
+  - triggers Render deploy hook only when CI on `main` succeeds
+
+Set this GitHub repository secret:
+- `RENDER_DEPLOY_HOOK_URL`: your Render service deploy hook URL
