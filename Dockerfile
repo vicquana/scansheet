@@ -36,7 +36,18 @@ RUN apt-get update \
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
     api="https://api.github.com/repos/Audiveris/audiveris/releases/tags/${AUDIVERIS_VERSION}"; \
-    AUDIVERIS_URL="$(api="$api" arch="$arch" python3 -c 'import json, os, re, urllib.request; data=json.load(urllib.request.urlopen(os.environ[\"api\"])); arch=os.environ[\"arch\"]; pats=[r\"x86_64\", r\"amd64\"] if arch==\"amd64\" else ([r\"arm64\", r\"aarch64\"] if arch==\"arm64\" else []); cand=sorted((((3 if \"ubuntu\" in a.get(\"name\", \"\").lower() else 0) + (10 if (pats and any(re.search(p, a.get(\"name\", \"\"), re.IGNORECASE) for p in pats)) else 0), a.get(\"browser_download_url\", \"\")) for a in data.get(\"assets\", []) if a.get(\"name\", \"\").lower().endswith(\".deb\")), reverse=True); print(cand[0][1] if cand else \"\")')"; \
+    if [ "$arch" = "amd64" ]; then \
+      arch_regex='(x86_64|amd64)'; \
+    elif [ "$arch" = "arm64" ]; then \
+      arch_regex='(arm64|aarch64)'; \
+    else \
+      arch_regex=''; \
+    fi; \
+    release_json="$(curl -fsSL "$api")"; \
+    AUDIVERIS_URL="$(printf '%s\n' "$release_json" | grep -oE 'https://[^"]+\.deb' | grep -Ei 'ubuntu' | grep -Ei "$arch_regex" | head -n1)"; \
+    if [ -z "$AUDIVERIS_URL" ]; then \
+      AUDIVERIS_URL="$(printf '%s\n' "$release_json" | grep -oE 'https://[^"]+\.deb' | grep -Ei 'ubuntu' | head -n1)"; \
+    fi; \
     test -n "$AUDIVERIS_URL"; \
     wget -q -O /tmp/audiveris.deb "$AUDIVERIS_URL"; \
     dpkg -i /tmp/audiveris.deb || (apt-get update && apt-get install -y -f); \
