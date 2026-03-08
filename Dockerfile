@@ -24,11 +24,14 @@ RUN apt-get update \
       ca-certificates \
       curl \
       wget \
+      xdg-utils \
       python3 \
       python3-pip \
       python3-venv \
       openjdk-17-jre-headless \
       fontconfig \
+      libasound2t64 \
+      libasound2-data \
       libfreetype6 \
       libxi6 \
       libxext6 \
@@ -36,7 +39,7 @@ RUN apt-get update \
       libxtst6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Resolve Audiveris .deb URL by release + architecture, then install with apt for dependency resolution.
+# Resolve Audiveris .deb URL by release + architecture, then unpack without postinst scripts.
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
     if [ "$arch" = "amd64" ]; then \
@@ -57,12 +60,17 @@ RUN set -eux; \
       echo "Could not download Audiveris .deb for ${AUDIVERIS_VERSION} (${aud_arch})"; \
       exit 1; \
     fi; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends /tmp/audiveris.deb || (apt-get install -y -f && apt-get install -y --no-install-recommends /tmp/audiveris.deb); \
-    if [ -x /opt/audiveris/bin/Audiveris ]; then \
+    rm -rf /opt/audiveris; \
+    mkdir -p /opt/audiveris; \
+    dpkg-deb -x /tmp/audiveris.deb /opt/audiveris; \
+    if [ -x /opt/audiveris/opt/audiveris/bin/Audiveris ]; then \
+      ln -sf /opt/audiveris/opt/audiveris/bin/Audiveris /usr/local/bin/audiveris; \
+    elif [ -x /opt/audiveris/bin/Audiveris ]; then \
       ln -sf /opt/audiveris/bin/Audiveris /usr/local/bin/audiveris; \
-    elif command -v Audiveris >/dev/null 2>&1; then \
-      ln -sf "$(command -v Audiveris)" /usr/local/bin/audiveris; \
+    else \
+      echo "Audiveris binary not found after extracting package"; \
+      find /opt/audiveris -maxdepth 5 -type f -name 'Audiveris' || true; \
+      exit 1; \
     fi; \
     rm -f /tmp/audiveris.deb; \
     rm -rf /var/lib/apt/lists/*
