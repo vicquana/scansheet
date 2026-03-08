@@ -8,21 +8,25 @@ COPY frontend/ ./
 RUN pnpm build
 
 # -------- Runtime --------
-FROM python:3.11-slim-bookworm
+FROM ubuntu:24.04
 
 ARG AUDIVERIS_VERSION=5.8.1
+ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV AUDIVERIS_BIN=/usr/local/bin/audiveris
 
 WORKDIR /app
 
-# Runtime libs + Java required by Audiveris.
+# Python runtime + Java + native libs required by Audiveris.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
       wget \
+      python3 \
+      python3-pip \
+      python3-venv \
       openjdk-17-jre-headless \
       fontconfig \
       libfreetype6 \
@@ -32,25 +36,29 @@ RUN apt-get update \
       libxtst6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Resolve Audiveris .deb URL from GitHub release assets by version + architecture.
+# Resolve Audiveris .deb URL by release + architecture, then install with apt for dependency resolution.
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
-    api="https://api.github.com/repos/Audiveris/audiveris/releases/tags/${AUDIVERIS_VERSION}"; \
     if [ "$arch" = "amd64" ]; then \
-      arch_regex='(x86_64|amd64)'; \
+      aud_arch="x86_64"; \
     elif [ "$arch" = "arm64" ]; then \
-      arch_regex='(arm64|aarch64)'; \
+      aud_arch="aarch64"; \
     else \
-      arch_regex=''; \
+      echo "Unsupported architecture: $arch"; exit 1; \
     fi; \
-    release_json="$(curl -fsSL "$api")"; \
-    AUDIVERIS_URL="$(printf '%s\n' "$release_json" | grep -oE 'https://[^"]+\.deb' | grep -Ei 'ubuntu' | grep -Ei "$arch_regex" | head -n1)"; \
-    if [ -z "$AUDIVERIS_URL" ]; then \
-      AUDIVERIS_URL="$(printf '%s\n' "$release_json" | grep -oE 'https://[^"]+\.deb' | grep -Ei 'ubuntu' | head -n1)"; \
+    base="https://github.com/Audiveris/audiveris/releases/download/${AUDIVERIS_VERSION}"; \
+    url24="$base/Audiveris-${AUDIVERIS_VERSION}-ubuntu24.04-${aud_arch}.deb"; \
+    url22="$base/Audiveris-${AUDIVERIS_VERSION}-ubuntu22.04-${aud_arch}.deb"; \
+    if wget -q -O /tmp/audiveris.deb "$url24"; then \
+      echo "Using $url24"; \
+    elif wget -q -O /tmp/audiveris.deb "$url22"; then \
+      echo "Using $url22"; \
+    else \
+      echo "Could not download Audiveris .deb for ${AUDIVERIS_VERSION} (${aud_arch})"; \
+      exit 1; \
     fi; \
-    test -n "$AUDIVERIS_URL"; \
-    wget -q -O /tmp/audiveris.deb "$AUDIVERIS_URL"; \
-    dpkg -i /tmp/audiveris.deb || (apt-get update && apt-get install -y -f); \
+    apt-get update; \
+    apt-get install -y --no-install-recommends /tmp/audiveris.deb || (apt-get install -y -f && apt-get install -y --no-install-recommends /tmp/audiveris.deb); \
     if [ -x /opt/audiveris/bin/Audiveris ]; then \
       ln -sf /opt/audiveris/bin/Audiveris /usr/local/bin/audiveris; \
     elif command -v Audiveris >/dev/null 2>&1; then \
@@ -60,10 +68,10 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --break-system-packages --no-cache-dir -r requirements.txt
 
 COPY backend ./backend
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 EXPOSE 8000
-CMD ["python", "backend/run.py"]
+CMD ["python3", "backend/run.py"]
