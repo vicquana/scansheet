@@ -23,6 +23,7 @@ from app.services.image_cleanup import (
     generate_clean_sheet_outputs,
     generate_clean_sheet_outputs_from_images,
 )
+from app.services.preprocess import PreprocessError, normalize_image_for_omr
 
 app = FastAPI(title="ScoreTransposer API", version="0.1.0")
 
@@ -115,7 +116,9 @@ async def convert_sheet_music(
             suffix = Path(upload.filename or "input.png").suffix or ".png"
             input_image = tmp_path / f"page-{page_index:04d}{suffix}"
             input_image.write_bytes(await upload.read())
-            ordered_images.append(input_image)
+            normalized_image = tmp_path / f"page-{page_index:04d}-300dpi.png"
+            normalize_image_for_omr(input_image, normalized_image)
+            ordered_images.append(normalized_image)
             filenames_in_order.append(upload.filename)
 
         omr_input = ordered_images[0]
@@ -138,7 +141,7 @@ async def convert_sheet_music(
                 generate_clean_sheet_outputs_from_images(
                     ordered_images, cleaned_jpeg_target, cleaned_pdf_target
                 )
-        except (AudiverisError, TransposeError, ImageCleanupError, OSError) as exc:
+        except (AudiverisError, TransposeError, ImageCleanupError, PreprocessError, OSError) as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         except Exception as exc:  # Ensure unexpected failures return a debuggable message.
             traceback.print_exc()
